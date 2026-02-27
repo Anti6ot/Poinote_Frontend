@@ -1,16 +1,18 @@
 import { create } from 'zustand';
 
-export type BlockType = 'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'todo' | 'bullet' | 'divider';
+export type BlockType = 'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'todo' | 'bullet' | 'divider' | 'page';
 
 export interface Block {
   id: string;
   type: BlockType;
   content: string;
   checked?: boolean;
+  linkedPageId?: string; // for 'page' block type
 }
 
 export interface Page {
   id: string;
+  parentId: string | null;
   title: string;
   icon: string;
   blocks: Block[];
@@ -22,7 +24,7 @@ interface WorkspaceState {
   pages: Page[];
   activePageId: string | null;
   sidebarOpen: boolean;
-  addPage: () => string;
+  addPage: (parentId?: string | null) => string;
   deletePage: (id: string) => void;
   setActivePage: (id: string) => void;
   updatePageTitle: (id: string, title: string) => void;
@@ -31,6 +33,9 @@ interface WorkspaceState {
   updateBlock: (pageId: string, blockId: string, updates: Partial<Block>) => void;
   deleteBlock: (pageId: string, blockId: string) => void;
   toggleSidebar: () => void;
+  addSubPageBlock: (pageId: string, afterBlockId: string | null) => string;
+  getPageBreadcrumbs: (pageId: string) => Page[];
+  getChildPages: (parentId: string | null) => Page[];
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -42,6 +47,7 @@ const createDefaultPage = (): Page => ({
   id: uid(),
   title: 'Getting Started',
   icon: '👋',
+  parentId: null,
   createdAt: Date.now(),
   updatedAt: Date.now(),
   blocks: [
@@ -64,9 +70,25 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   activePageId: defaultPage.id,
   sidebarOpen: true,
 
-  addPage: () => {
+  getChildPages: (parentId) => {
+    return get().pages.filter(p => p.parentId === parentId);
+  },
+
+  getPageBreadcrumbs: (pageId) => {
+    const { pages } = get();
+    const crumbs: Page[] = [];
+    let current = pages.find(p => p.id === pageId);
+    while (current) {
+      crumbs.unshift(current);
+      current = current.parentId ? pages.find(p => p.id === current!.parentId) : undefined;
+    }
+    return crumbs;
+  },
+
+  addPage: (parentId = null) => {
     const newPage: Page = {
       id: uid(),
+      parentId,
       title: '',
       icon: randomIcon(),
       blocks: [{ id: uid(), type: 'paragraph', content: '' }],
@@ -82,11 +104,29 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   deletePage: (id) => {
     const { pages, activePageId } = get();
-    if (pages.length <= 1) return;
-    const filtered = pages.filter(p => p.id !== id);
+    // Collect all descendant IDs
+    const toDelete = new Set<string>();
+    const collect = (pid: string) => {
+      toDelete.add(pid);
+      pages.filter(p => p.parentId === pid).forEach(p => collect(p.id));
+    };
+    collect(id);
+
+    const filtered = pages.filter(p => !toDelete.has(p.id));
+    if (filtered.length === 0) return; // don't delete everything
+
+    // Also remove page blocks that reference deleted pages
+    const cleaned = filtered.map(p => ({
+      ...p,
+      blocks: p.blocks.filter(b => !(b.type === 'page' && b.linkedPageId && toDelete.has(b.linkedPageId))),
+    })).map(p => ({
+      ...p,
+      blocks: p.blocks.length === 0 ? [{ id: uid(), type: 'paragraph' as BlockType, content: '' }] : p.blocks,
+    }));
+
     set({
-      pages: filtered,
-      activePageId: activePageId === id ? filtered[0].id : activePageId,
+      pages: cleaned,
+      activePageId: toDelete.has(activePageId || '') ? cleaned[0].id : activePageId,
     });
   },
 
@@ -118,6 +158,35 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       }),
     }));
     return newId;
+  },
+
+  addSubPageBlock: (pageId, afterBlockId) => {
+    // Create the subpage
+    const subPageId = uid();
+    const blockId = uid();
+    const subPage: Page = {
+      id: subPageId,
+      parentId: pageId,
+      title: '',
+      icon: randomIcon(),
+      blocks: [{ id: uid(), type: 'paragraph', content: '' }],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    // Create a page block linking to it
+    set(state => ({
+      pages: [...state.pages, subPage].map(p => {
+        if (p.id !== pageId) return p;
+        const newBlock: Block = { id: blockId, type: 'page', content: '', linkedPageId: subPageId };
+        if (!afterBlockId) return { ...p, blocks: [...p.blocks, newBlock], updatedAt: Date.now() };
+        const idx = p.blocks.findIndex(b => b.id === afterBlockId);
+        const blocks = [...p.blocks];
+        blocks.splice(idx + 1, 0, newBlock);
+        return { ...p, blocks, updatedAt: Date.now() };
+      }),
+      activePageId: subPageId,
+    }));
+    return blockId;
   },
 
   updateBlock: (pageId, blockId, updates) => {
