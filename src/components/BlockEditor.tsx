@@ -1,0 +1,182 @@
+import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { useWorkspace, Block, BlockType } from '@/store/workspace';
+import { GripVertical, Plus, Check, Circle } from 'lucide-react';
+import SlashMenu from './SlashMenu';
+
+interface BlockEditorProps {
+  block: Block;
+  pageId: string;
+  onFocusBlock?: (blockId: string) => void;
+  focusThisBlock?: boolean;
+}
+
+const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEditorProps) => {
+  const { updateBlock, addBlock, deleteBlock } = useWorkspace();
+  const ref = useRef<HTMLDivElement>(null);
+  const [showSlash, setShowSlash] = useState(false);
+  const [slashFilter, setSlashFilter] = useState('');
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    if (focusThisBlock && ref.current) {
+      ref.current.focus();
+      // Place cursor at end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(ref.current);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  }, [focusThisBlock]);
+
+  const handleInput = () => {
+    if (!ref.current) return;
+    const text = ref.current.innerText;
+    updateBlock(pageId, block.id, { content: text });
+
+    if (text.endsWith('/')) {
+      setShowSlash(true);
+      setSlashFilter('');
+    } else if (showSlash) {
+      const slashIdx = text.lastIndexOf('/');
+      if (slashIdx >= 0) {
+        setSlashFilter(text.slice(slashIdx + 1));
+      } else {
+        setShowSlash(false);
+      }
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (showSlash) {
+      if (e.key === 'Escape') {
+        setShowSlash(false);
+        e.preventDefault();
+        return;
+      }
+      return; // Let SlashMenu handle Enter/arrows
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const newId = addBlock(pageId, block.id, block.type === 'todo' ? 'todo' : block.type === 'bullet' ? 'bullet' : 'paragraph');
+      setTimeout(() => onFocusBlock?.(newId), 10);
+    }
+
+    if (e.key === 'Backspace' && ref.current?.innerText === '') {
+      e.preventDefault();
+      deleteBlock(pageId, block.id);
+    }
+  };
+
+  const handleSlashSelect = (type: BlockType) => {
+    setShowSlash(false);
+    // Remove the "/" and any filter text
+    if (ref.current) {
+      const text = ref.current.innerText;
+      const slashIdx = text.lastIndexOf('/');
+      const newText = text.slice(0, slashIdx);
+      ref.current.innerText = newText;
+      updateBlock(pageId, block.id, { content: newText, type, ...(type === 'todo' ? { checked: false } : {}) });
+    }
+  };
+
+  const placeholderMap: Record<BlockType, string> = {
+    paragraph: "Type '/' for commands...",
+    heading1: 'Heading 1',
+    heading2: 'Heading 2',
+    heading3: 'Heading 3',
+    todo: 'To-do',
+    bullet: 'List item',
+    divider: '',
+  };
+
+  const styleMap: Record<BlockType, string> = {
+    paragraph: 'text-base leading-relaxed',
+    heading1: 'text-3xl font-bold font-serif-heading leading-tight',
+    heading2: 'text-2xl font-semibold leading-snug',
+    heading3: 'text-lg font-semibold leading-snug',
+    todo: 'text-base leading-relaxed',
+    bullet: 'text-base leading-relaxed',
+    divider: '',
+  };
+
+  if (block.type === 'divider') {
+    return <hr className="my-4 border-border" />;
+  }
+
+  return (
+    <div
+      className="group relative flex items-start gap-1 py-0.5 rounded-md transition-colors"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Left controls */}
+      <div className={`flex items-center gap-0.5 pt-1 transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`}>
+        <button
+          onClick={() => {
+            const newId = addBlock(pageId, block.id);
+            setTimeout(() => onFocusBlock?.(newId), 10);
+          }}
+          className="p-0.5 rounded hover:bg-accent text-notion-icon hover:text-notion-icon-hover"
+        >
+          <Plus size={14} />
+        </button>
+        <button className="p-0.5 rounded hover:bg-accent text-notion-icon hover:text-notion-icon-hover cursor-grab">
+          <GripVertical size={14} />
+        </button>
+      </div>
+
+      {/* Todo checkbox */}
+      {block.type === 'todo' && (
+        <button
+          onClick={() => updateBlock(pageId, block.id, { checked: !block.checked })}
+          className={`mt-1 flex-shrink-0 w-4 h-4 rounded-sm border flex items-center justify-center transition-colors ${
+            block.checked
+              ? 'bg-notion-todo-checked border-notion-todo-checked'
+              : 'border-muted-foreground/40 hover:border-muted-foreground'
+          }`}
+        >
+          {block.checked && <Check size={11} className="text-primary-foreground" />}
+        </button>
+      )}
+
+      {/* Bullet */}
+      {block.type === 'bullet' && (
+        <div className="mt-2 flex-shrink-0">
+          <Circle size={6} className="fill-foreground text-foreground" />
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="relative flex-1 min-w-0">
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          data-placeholder={placeholderMap[block.type]}
+          className={`
+            outline-none w-full
+            ${styleMap[block.type]}
+            ${block.type === 'todo' && block.checked ? 'line-through text-muted-foreground' : 'text-foreground'}
+            empty:before:content-[attr(data-placeholder)] empty:before:text-notion-placeholder empty:before:pointer-events-none
+          `}
+          dangerouslySetInnerHTML={{ __html: block.content }}
+        />
+
+        {showSlash && (
+          <SlashMenu
+            filter={slashFilter}
+            onSelect={handleSlashSelect}
+            onClose={() => setShowSlash(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default BlockEditor;
