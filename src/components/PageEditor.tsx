@@ -1,23 +1,24 @@
 import { useState, useRef, useCallback } from 'react';
-import { useWorkspace } from '@/store/workspace';
+import { useWorkspaceCtx } from '@/hooks/useWorkspaceCtx';
 import BlockEditor from './BlockEditor';
 import { ChevronRight } from 'lucide-react';
 
 const PageEditor = () => {
-  const { pages, activePageId, updatePageTitle, setActivePage, getPageBreadcrumbs } = useWorkspace();
+  const { pages, activePageId, blocks, updatePageTitle, setActivePageId, getPageBreadcrumbs } = useWorkspaceCtx();
   const page = pages.find(p => p.id === activePageId);
+  const pageBlocks = activePageId ? (blocks.get(activePageId) || []) : [];
   const [focusBlockId, setFocusBlockId] = useState<string | null>(null);
   const titleRef = useRef<HTMLDivElement>(null);
 
   const handleFocusBlock = useCallback((blockId: string) => {
     setFocusBlockId(blockId);
-    setTimeout(() => setFocusBlockId(null), 50);
+    setTimeout(() => setFocusBlockId(null), 100);
   }, []);
 
   if (!page) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <p>Select a page to start editing</p>
+        <p>Select a page or create one to start editing</p>
       </div>
     );
   }
@@ -27,14 +28,13 @@ const PageEditor = () => {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-12 py-16">
-        {/* Breadcrumbs */}
         {breadcrumbs.length > 1 && (
           <div className="flex items-center gap-1 mb-6 text-sm text-muted-foreground">
             {breadcrumbs.map((crumb, i) => (
               <div key={crumb.id} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight size={12} />}
                 <button
-                  onClick={() => setActivePage(crumb.id)}
+                  onClick={() => setActivePageId(crumb.id)}
                   className={`hover:text-foreground transition-colors ${crumb.id === page.id ? 'text-foreground font-medium' : ''}`}
                 >
                   {crumb.icon} {crumb.title || 'Untitled'}
@@ -44,10 +44,8 @@ const PageEditor = () => {
           </div>
         )}
 
-        {/* Page icon */}
         <div className="text-5xl mb-4 cursor-default">{page.icon}</div>
 
-        {/* Title */}
         <div
           ref={titleRef}
           contentEditable
@@ -62,9 +60,8 @@ const PageEditor = () => {
           dangerouslySetInnerHTML={{ __html: page.title }}
         />
 
-        {/* Blocks */}
         <div className="space-y-0.5">
-          {page.blocks.map(block => (
+          {pageBlocks.map(block => (
             <BlockEditor
               key={block.id}
               block={block}
