@@ -1,10 +1,81 @@
 import { useWorkspace } from '@/store/workspace';
-import { Plus, FileText, Trash2, ChevronLeft, Search } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, Search, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
+interface PageTreeItemProps {
+  pageId: string;
+  depth: number;
+}
+
+const PageTreeItem = ({ pageId, depth }: PageTreeItemProps) => {
+  const { pages, activePageId, addPage, deletePage, setActivePage } = useWorkspace();
+  const page = pages.find(p => p.id === pageId);
+  const children = pages.filter(p => p.parentId === pageId);
+  const [hovered, setHovered] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+
+  if (!page) return null;
+
+  return (
+    <div>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => setActivePage(page.id)}
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
+        className={`
+          group flex items-center gap-1 pr-2 py-1.5 rounded-md cursor-pointer text-sm transition-colors
+          ${page.id === activePageId
+            ? 'bg-notion-sidebar-active text-foreground font-medium'
+            : 'text-notion-sidebar-fg hover:bg-notion-sidebar-hover'
+          }
+        `}
+      >
+        {/* Expand/collapse toggle */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          className={`p-0.5 rounded hover:bg-notion-sidebar-hover text-notion-icon transition-all ${children.length === 0 ? 'invisible' : ''}`}
+        >
+          <ChevronRight size={13} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        </button>
+
+        <span className="text-base leading-none">{page.icon}</span>
+        <span className="flex-1 truncate ml-1">{page.title || 'Untitled'}</span>
+
+        {hovered && (
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={(e) => { e.stopPropagation(); addPage(page.id); }}
+              className="p-0.5 rounded hover:bg-notion-sidebar-hover text-notion-icon hover:text-notion-icon-hover transition-colors"
+              title="Add subpage"
+            >
+              <Plus size={13} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
+              className="p-0.5 rounded hover:bg-destructive/10 text-notion-icon hover:text-destructive transition-colors"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Children */}
+      {expanded && children.length > 0 && (
+        <div>
+          {children.map(child => (
+            <PageTreeItem key={child.id} pageId={child.id} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Sidebar = () => {
-  const { pages, activePageId, sidebarOpen, addPage, deletePage, setActivePage, toggleSidebar } = useWorkspace();
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const { pages, sidebarOpen, addPage, toggleSidebar } = useWorkspace();
+  const rootPages = pages.filter(p => p.parentId === null);
 
   if (!sidebarOpen) return null;
 
@@ -34,45 +105,22 @@ const Sidebar = () => {
         <div className="flex items-center justify-between px-2 py-1 mb-0.5">
           <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
           <button
-            onClick={addPage}
+            onClick={() => addPage(null)}
             className="p-0.5 rounded hover:bg-notion-sidebar-hover text-notion-icon hover:text-notion-icon-hover transition-colors"
           >
             <Plus size={14} />
           </button>
         </div>
 
-        {pages.map(page => (
-          <div
-            key={page.id}
-            onMouseEnter={() => setHoveredId(page.id)}
-            onMouseLeave={() => setHoveredId(null)}
-            onClick={() => setActivePage(page.id)}
-            className={`
-              group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-sm transition-colors
-              ${page.id === activePageId
-                ? 'bg-notion-sidebar-active text-foreground font-medium'
-                : 'text-notion-sidebar-fg hover:bg-notion-sidebar-hover'
-              }
-            `}
-          >
-            <span className="text-base leading-none">{page.icon}</span>
-            <span className="flex-1 truncate">{page.title || 'Untitled'}</span>
-            {hoveredId === page.id && pages.length > 1 && (
-              <button
-                onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
-                className="p-0.5 rounded hover:bg-destructive/10 text-notion-icon hover:text-destructive transition-colors"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
+        {rootPages.map(page => (
+          <PageTreeItem key={page.id} pageId={page.id} depth={0} />
         ))}
       </div>
 
       {/* Footer */}
       <div className="px-3 py-2 border-t border-border">
         <button
-          onClick={addPage}
+          onClick={() => addPage(null)}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm text-notion-icon hover:bg-notion-sidebar-hover hover:text-foreground transition-colors"
         >
           <Plus size={15} />

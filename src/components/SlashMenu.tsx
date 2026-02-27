@@ -1,5 +1,5 @@
 import { BlockType } from '@/store/workspace';
-import { Type, Heading1, Heading2, Heading3, CheckSquare, List, Minus } from 'lucide-react';
+import { Type, Heading1, Heading2, Heading3, CheckSquare, List, Minus, FileText } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 interface SlashMenuItem {
@@ -17,6 +17,7 @@ const items: SlashMenuItem[] = [
   { type: 'todo', label: 'To-do', description: 'Checkbox item', icon: <CheckSquare size={18} /> },
   { type: 'bullet', label: 'Bullet list', description: 'Unordered list item', icon: <List size={18} /> },
   { type: 'divider', label: 'Divider', description: 'Horizontal line', icon: <Minus size={18} /> },
+  { type: 'page', label: 'Page', description: 'Embed a sub-page', icon: <FileText size={18} /> },
 ];
 
 interface SlashMenuProps {

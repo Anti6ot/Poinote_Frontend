@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { useWorkspace, Block, BlockType } from '@/store/workspace';
-import { GripVertical, Plus, Check, Circle } from 'lucide-react';
+import { GripVertical, Plus, Check, Circle, FileText } from 'lucide-react';
 import SlashMenu from './SlashMenu';
 
 interface BlockEditorProps {
@@ -11,7 +11,7 @@ interface BlockEditorProps {
 }
 
 const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEditorProps) => {
-  const { updateBlock, addBlock, deleteBlock } = useWorkspace();
+  const { updateBlock, addBlock, deleteBlock, addSubPageBlock, pages, setActivePage } = useWorkspace();
   const ref = useRef<HTMLDivElement>(null);
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
@@ -20,7 +20,6 @@ const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEdito
   useEffect(() => {
     if (focusThisBlock && ref.current) {
       ref.current.focus();
-      // Place cursor at end
       const range = document.createRange();
       const sel = window.getSelection();
       range.selectNodeContents(ref.current);
@@ -55,7 +54,7 @@ const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEdito
         e.preventDefault();
         return;
       }
-      return; // Let SlashMenu handle Enter/arrows
+      return;
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -72,15 +71,40 @@ const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEdito
 
   const handleSlashSelect = (type: BlockType) => {
     setShowSlash(false);
-    // Remove the "/" and any filter text
     if (ref.current) {
       const text = ref.current.innerText;
       const slashIdx = text.lastIndexOf('/');
       const newText = text.slice(0, slashIdx);
       ref.current.innerText = newText;
+
+      if (type === 'page') {
+        // Remove slash text, then create subpage block
+        updateBlock(pageId, block.id, { content: newText });
+        addSubPageBlock(pageId, block.id);
+        return;
+      }
+
       updateBlock(pageId, block.id, { content: newText, type, ...(type === 'todo' ? { checked: false } : {}) });
     }
   };
+
+  // Render page block as a clickable link
+  if (block.type === 'page') {
+    const linkedPage = pages.find(p => p.id === block.linkedPageId);
+    return (
+      <div
+        className="group relative flex items-center gap-2 py-1.5 px-2 rounded-md cursor-pointer hover:bg-notion-block-hover transition-colors"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => block.linkedPageId && setActivePage(block.linkedPageId)}
+      >
+        <FileText size={16} className="text-notion-icon flex-shrink-0" />
+        <span className="text-foreground font-medium hover:underline">
+          {linkedPage?.icon} {linkedPage?.title || 'Untitled'}
+        </span>
+      </div>
+    );
+  }
 
   const placeholderMap: Record<BlockType, string> = {
     paragraph: "Type '/' for commands...",
@@ -90,6 +114,7 @@ const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEdito
     todo: 'To-do',
     bullet: 'List item',
     divider: '',
+    page: '',
   };
 
   const styleMap: Record<BlockType, string> = {
@@ -100,6 +125,7 @@ const BlockEditor = ({ block, pageId, onFocusBlock, focusThisBlock }: BlockEdito
     todo: 'text-base leading-relaxed',
     bullet: 'text-base leading-relaxed',
     divider: '',
+    page: '',
   };
 
   if (block.type === 'divider') {
