@@ -1,4 +1,4 @@
-import { BlockType } from '@/store/workspace';
+type BlockType = 'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'todo' | 'bullet' | 'divider' | 'page';
 import { Type, Heading1, Heading2, Heading3, CheckSquare, List, Minus, FileText } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
