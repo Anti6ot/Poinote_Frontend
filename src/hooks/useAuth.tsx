@@ -10,7 +10,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (name: string, email: string, password: string) => Promise<AuthResult>;
+  login: (email: string, password: string) => Promise<AuthResult>;
   register: (name: string, email: string, password: string) => Promise<AuthResult>;
   logout: () => void;
 }

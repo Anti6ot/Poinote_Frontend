@@ -21,7 +21,7 @@ const Auth = () => {
 
     const { error } = isSignUp
       ? await register(name, email, password)
-      : await login(name, email, password);
+      : await login(email, password);
 
     setLoading(false);
 
